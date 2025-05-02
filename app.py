@@ -1,0 +1,90 @@
+import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+# Configuración de página
+st.set_page_config(page_title="Informe Diario de Gestión", layout="wide")
+
+st.title("📊 Informe Diario de Gestión")
+
+# Autenticación con Google Sheets
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+client = gspread.authorize(creds)
+
+# Cargar datos desde la hoja
+try:
+    sheet = client.open_by_key("1rXTfHNd2j2Nv7yWJzHfjcrAmq5bhh_DmyJXMbhe6d-M").worksheet("TOTAL")
+    data = sheet.get_all_records()
+except Exception as e:
+    st.error("❌ Error al conectar con Google Sheets. Verifica el ID del documento y el acceso compartido.")
+    st.stop()
+
+# Diccionario de campos
+campos = {
+    "BASE": "BASE",
+    "SEGEMENTO REGIONAL": "BUNDLE",
+    "SUSCRIPTOR": "SUSCRIPTOR",
+    "CUENTA": "CUENTA",
+    "NOMBRE_CLIENTE": "NOMBRE_CLIENTE",
+    "Numero 1": "Numero 1",
+    "EMAIL": "Fijo 2",
+    "Asesor": "Asesor",
+    "Fecha": "Fecha",
+    "Hora": "Hora",
+    "Gestion": "Gestion",
+    "Razón": "Razon",
+    "Comentario": "Comentario"
+}
+
+# Crear DataFrame y renombrar columnas
+df = pd.DataFrame(data)
+df = df.rename(columns=campos)
+
+# Normalizar fechas y horas
+df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce", dayfirst=True)
+df["Hora"] = pd.to_datetime(df["Hora"], errors="coerce").dt.time
+
+# Filtros
+fecha_seleccionada = st.date_input("📅 Selecciona la fecha", value=datetime.now().date())
+agentes_disponibles = sorted(df["Asesor"].dropna().unique().tolist())
+agente_seleccionado = st.selectbox("👤 Selecciona un agente", ["Todos"] + agentes_disponibles)
+
+# Filtrar por fecha
+df_filtrado = df[df["Fecha"].dt.date == fecha_seleccionada]
+
+# Filtrar por agente
+if agente_seleccionado != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["Asesor"] == agente_seleccionado]
+
+# Si no hay datos
+if df_filtrado.empty:
+    st.warning("⚠️ No se encontraron gestiones para este filtro.")
+    st.stop()
+
+# Ordenar por hora
+df_filtrado = df_filtrado.sort_values(by="Hora")
+
+# Calcular intervalo entre gestiones
+df_filtrado["HoraDatetime"] = pd.to_datetime(df_filtrado["Hora"].astype(str), errors="coerce")
+df_filtrado["Intervalo"] = df_filtrado["HoraDatetime"].diff().apply(lambda x: x if pd.notnull(x) else pd.NaT)
+
+# Mini informe
+total_gestiones = len(df_filtrado)
+horas_laborales = 9
+proyeccion_diaria = round((total_gestiones / datetime.now().hour) * horas_laborales, 2) if datetime.now().hour > 0 else total_gestiones
+
+st.subheader("🧾 Resumen del Día")
+col1, col2, col3 = st.columns(3)
+col1.metric("Total de Gestiones", total_gestiones)
+col2.metric("Proyección (9h)", proyeccion_diaria)
+col3.metric("Fecha", fecha_seleccionada.strftime("%d/%m/%Y"))
+
+# Mostrar tabla
+st.subheader("📋 Gestiones del día")
+st.dataframe(df_filtrado[[
+    "Asesor", "Fecha", "Hora", "Gestion", "Razon", "Comentario", 
+    "NOMBRE_CLIENTE", "CUENTA", "SUSCRIPTOR", "Numero 1", "Fijo 2", "Intervalo"
+]])
