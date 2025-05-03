@@ -2,16 +2,16 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 # Configuración de página
 st.set_page_config(page_title="Informe Diario de Gestión", layout="wide")
 
 st.title("📊 Informe Diario de Gestión")
 
-# Autenticación con Google Sheets
+# Autenticación con Google Sheets usando st.secrets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+creds = Credentials.from_service_account_info(st.secrets["google_sheets"], scopes=scope)
 client = gspread.authorize(creds)
 
 # Cargar datos desde la hoja
@@ -21,6 +21,13 @@ try:
 except Exception as e:
     st.error("❌ Error al conectar con Google Sheets. Verifica el ID del documento y el acceso compartido.")
     st.stop()
+
+# Convertir a DataFrame para trabajar con pandas
+df = pd.DataFrame(data)
+
+# Muestra inicial de los datos
+st.dataframe(df)
+
 
 # Diccionario de campos
 campos = {
