@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -8,7 +8,7 @@ from google.oauth2.service_account import Credentials
 st.set_page_config(page_title="Informe Diario de Gestión", layout="wide")
 st.title("📊 Informe Diario de Gestión")
 
-# Autenticación con Google Sheets usando st.secrets
+# Autenticación con Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["google_sheets"], scopes=scope)
 client = gspread.authorize(creds)
@@ -21,8 +21,8 @@ except Exception as e:
     st.error("❌ Error al conectar con Google Sheets. Verifica el ID del documento y el acceso compartido.")
     st.stop()
 
-# Crear DataFrame original para análisis global
-df_original = pd.DataFrame(data)
+# Convertir a DataFrame
+df = pd.DataFrame(data)
 
 # Diccionario de campos
 campos = {
@@ -41,16 +41,24 @@ campos = {
     "Comentario": "Comentario"
 }
 
-# Renombrar columnas tanto en df como en df_original
-df_original = df_original.rename(columns=campos)
-df = df_original.copy()
+# Renombrar columnas
+df = df.rename(columns=campos)
 
-# Normalizar fechas y horas
-df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce", dayfirst=True)
-df["Hora"] = pd.to_datetime(df["Hora"], errors="coerce").dt.time
+# Convertir columnas numéricas a string (para evitar errores con pyarrow)
+cols_to_convert = ["SUSCRIPTOR", "CUENTA", "Numero 1", "Fijo 2"]
+for col in cols_to_convert:
+    if col in df.columns:
+        df[col] = df[col].astype(str)
+
+# Normalizar fechas y horas con formatos definidos
+df["Fecha"] = pd.to_datetime(df["Fecha"], format="%d/%m/%Y", errors="coerce")
+df["Hora"] = pd.to_datetime(df["Hora"].astype(str), format="%H:%M", errors="coerce").dt.time
 
 # Mostrar tabla completa
 st.dataframe(df)
+
+# Cantidad de base disponible: Asesor asignado y Gestion vacía
+base_disponible = df[(df["Asesor"].notna()) & (df["Gestion"] == "")].shape[0]
 
 # Filtros
 fecha_seleccionada = st.date_input("📅 Selecciona la fecha", value=datetime.now().date())
@@ -73,7 +81,7 @@ if df_filtrado.empty:
 df_filtrado = df_filtrado.sort_values(by="Hora")
 
 # Calcular intervalo entre gestiones
-df_filtrado["HoraDatetime"] = pd.to_datetime(df_filtrado["Hora"].astype(str), errors="coerce")
+df_filtrado["HoraDatetime"] = pd.to_datetime(df_filtrado["Hora"].astype(str), format="%H:%M:%S", errors="coerce")
 df_filtrado["Intervalo"] = df_filtrado["HoraDatetime"].diff().apply(lambda x: x if pd.notnull(x) else pd.NaT)
 
 # Mini informe
@@ -81,20 +89,14 @@ total_gestiones = len(df_filtrado)
 horas_laborales = 9
 proyeccion_diaria = round((total_gestiones / datetime.now().hour) * horas_laborales, 2) if datetime.now().hour > 0 else total_gestiones
 
-# Calcular base disponible desde la tabla completa
-base_disponible = df_original[
-    df_original["Gestion"].isna() & df_original["Asesor"].notna()
-].shape[0]
-
-# Mostrar resumen
 st.subheader("🧾 Resumen del Día")
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total de Gestiones", total_gestiones)
 col2.metric("Proyección (9h)", proyeccion_diaria)
 col3.metric("Fecha", fecha_seleccionada.strftime("%d/%m/%Y"))
-col4.metric("Base Disponible", base_disponible)
+col4.metric("Cantidad de Base Disponible", base_disponible)
 
-# Mostrar tabla de gestiones del día
+# Mostrar tabla filtrada
 st.subheader("📋 Gestiones del día")
 st.dataframe(df_filtrado[[
     "Asesor", "Fecha", "Hora", "Gestion", "Razon", "Comentario", 
