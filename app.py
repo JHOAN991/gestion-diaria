@@ -6,7 +6,6 @@ from google.oauth2.service_account import Credentials
 
 # Configuración de página
 st.set_page_config(page_title="Informe Diario de Gestión", layout="wide")
-
 st.title("📊 Informe Diario de Gestión")
 
 # Autenticación con Google Sheets usando st.secrets
@@ -22,8 +21,8 @@ except Exception as e:
     st.error("❌ Error al conectar con Google Sheets. Verifica el ID del documento y el acceso compartido.")
     st.stop()
 
-# Convertir a DataFrame para trabajar con pandas
-df = pd.DataFrame(data)
+# Crear DataFrame original para análisis global
+df_original = pd.DataFrame(data)
 
 # Diccionario de campos
 campos = {
@@ -42,8 +41,9 @@ campos = {
     "Comentario": "Comentario"
 }
 
-# Renombrar columnas
-df = df.rename(columns=campos)
+# Renombrar columnas tanto en df como en df_original
+df_original = df_original.rename(columns=campos)
+df = df_original.copy()
 
 # Normalizar fechas y horas
 df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce", dayfirst=True)
@@ -51,9 +51,6 @@ df["Hora"] = pd.to_datetime(df["Hora"], errors="coerce").dt.time
 
 # Mostrar tabla completa
 st.dataframe(df)
-
-# ➕ Calcular base disponible en toda la base (antes de aplicar filtros)
-base_disponible = df[df["Gestion"].isna() & df["Asesor"].notna()].shape[0]
 
 # Filtros
 fecha_seleccionada = st.date_input("📅 Selecciona la fecha", value=datetime.now().date())
@@ -84,6 +81,12 @@ total_gestiones = len(df_filtrado)
 horas_laborales = 9
 proyeccion_diaria = round((total_gestiones / datetime.now().hour) * horas_laborales, 2) if datetime.now().hour > 0 else total_gestiones
 
+# Calcular base disponible desde la tabla completa
+base_disponible = df_original[
+    df_original["Gestion"].isna() & df_original["Asesor"].notna()
+].shape[0]
+
+# Mostrar resumen
 st.subheader("🧾 Resumen del Día")
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total de Gestiones", total_gestiones)
@@ -91,7 +94,7 @@ col2.metric("Proyección (9h)", proyeccion_diaria)
 col3.metric("Fecha", fecha_seleccionada.strftime("%d/%m/%Y"))
 col4.metric("Base Disponible", base_disponible)
 
-# Mostrar tabla filtrada
+# Mostrar tabla de gestiones del día
 st.subheader("📋 Gestiones del día")
 st.dataframe(df_filtrado[[
     "Asesor", "Fecha", "Hora", "Gestion", "Razon", "Comentario", 
