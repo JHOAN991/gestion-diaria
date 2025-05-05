@@ -82,12 +82,15 @@ df_filtrado["Intervalo"] = df_filtrado["HoraDatetime"].diff().apply(lambda x: x 
 total_gestiones = len(df_filtrado)
 horas_laborales = 9
 proyeccion_diaria = round((total_gestiones / datetime.now().hour) * horas_laborales, 2) if datetime.now().hour > 0 else total_gestiones
+# Contar base disponible: registros con Asesor no nulo y Gestion vacía
+base_disponible = df_filtrado[df_filtrado["Gestion"].isna() & df_filtrado["Asesor"].notna()].shape[0]
 
 st.subheader("🧾 Resumen del Día")
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total de Gestiones", total_gestiones)
 col2.metric("Proyección (9h)", proyeccion_diaria)
 col3.metric("Fecha", fecha_seleccionada.strftime("%d/%m/%Y"))
+col4.metric("Base Disponible", base_disponible)
 
 # Mostrar tabla
 st.subheader("📋 Gestiones del día")
