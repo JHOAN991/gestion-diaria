@@ -51,8 +51,9 @@ for col in cols_to_convert:
         df[col] = df[col].astype(str)
 
 # Normalizar fechas y horas con formatos definidos
-df["Fecha"] = pd.to_datetime(df["Fecha"], format="%d/%m/%Y", errors="coerce")
-df["Hora"] = pd.to_datetime(df["Hora"].astype(str), format="%H:%M", errors="coerce").dt.time
+# Normalizar fechas y horas
+df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce", dayfirst=True)
+df["Hora"] = pd.to_datetime(df["Hora"], errors="coerce").dt.time
 
 # Mostrar tabla completa
 st.dataframe(df)
