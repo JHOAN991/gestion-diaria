@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
+from io import BytesIO
 
 def mostrar_descarga():
     st.title("⬇️ Descargar Bases por Filtro")
@@ -27,46 +28,52 @@ def mostrar_descarga():
         st.error(f"❌ Error al conectar con Google Sheets: {str(e)}")
         st.stop()
 
-    # Crear un DataFrame con los datos obtenidos
+    # Crear DataFrame
     df = pd.DataFrame(data)
 
-    # Verificar si la columna 'BASE' existe
-    if "BASE" not in df.columns:
-        st.error("❌ La columna 'BASE' no está en los datos.")
-        return
+    # Renombrar columnas
+    campos = {
+        "BASE": "BASE", "Asesor": "Asesor", "Fecha": "Fecha", "Gestion": "Gestion",
+        "Razón": "Razon", "Comentario": "Comentario", "NOMBRE_CLIENTE": "NOMBRE_CLIENTE",
+        "CUENTA": "CUENTA", "SUSCRIPTOR": "SUSCRIPTOR", "Numero 1": "Numero 1",
+        "EMAIL": "Fijo 2"
+    }
+    df = df.rename(columns=campos)
 
+    # Asegurar columnas necesarias
+    columnas_esperadas = ["BASE", "Asesor", "Fecha", "Gestion", "Razon", "Comentario",
+                          "NOMBRE_CLIENTE", "CUENTA", "SUSCRIPTOR", "Numero 1", "Fijo 2"]
+    for col in columnas_esperadas:
+        if col not in df.columns:
+            df[col] = ""
 
-    # Obtener las bases disponibles
+    # Convertir a string columnas necesarias
+    for col in ["SUSCRIPTOR", "CUENTA", "Numero 1", "Fijo 2", "Comentario"]:
+        df[col] = df[col].astype(str)
+
+    # Filtro por base
     base_unicas = df["BASE"].dropna().unique().tolist()
     base_seleccionada = st.selectbox("📂 Selecciona la base", base_unicas)
 
-    # Filtrar los datos según la base seleccionada
-    df_filtrado = df[df["BASE"] == base_seleccionada]
+    # Filtrar
+    df_filtrado = df[df["BASE"] == base_seleccionada].copy()
+    df_export = df_filtrado[columnas_esperadas]
 
-    # Especificar las columnas a exportar
-    columnas_exportar = [
-        "BASE", "Asesor", "Fecha", "Gestion", "Razón", "Comentario",
-        "NOMBRE_CLIENTE", "CUENTA", "SUSCRIPTOR", "Numero 1"
-    ]
-    
-    # Asegurarse de que todas las columnas estén disponibles antes de proceder
-    if not all(col in df.columns for col in columnas_exportar):
-        st.error("❌ Algunas columnas necesarias no están presentes en los datos.")
-        return
+    # Crear archivo Excel en memoria
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_export.to_excel(writer, index=False, sheet_name='BaseFiltrada')
+    output.seek(0)
 
-    # Renombrar las columnas antes de la exportación
-    df_export = df_filtrado[columnas_exportar].rename(columns={"EMAIL": "Fijo 2"})
-
-    # Convertir el DataFrame filtrado a CSV
-    csv = df_export.to_csv(index=False).encode("utf-8")
-
-    # Botón para descargar el archivo CSV
+    # Descargar
+    nombre_archivo = f"{base_seleccionada}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx"
     st.download_button(
-        label="📥 Descargar CSV",
-        data=csv,
-        file_name=f"{base_seleccionada}_datos.csv",
-        mime="text/csv"
+        label="📥 Descargar Excel",
+        data=output,
+        file_name=nombre_archivo,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # Mostrar los datos filtrados en una tabla
+    # Vista previa
+    st.subheader("📋 Vista previa de la base filtrada")
     st.dataframe(df_export)
